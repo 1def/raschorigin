@@ -269,8 +269,7 @@ def main():
         btn_2024 = types.InlineKeyboardButton(label_2024, callback_data='mode_2024')
         btn_2025 = types.InlineKeyboardButton(label_2025, callback_data='mode_2025')
         markup.add(btn_2024, btn_2025)
-        bot.send_message(message.chat.id, f"Yangi tahlil rejimini tanlang: 2024 yoki 2025
-Joriy rejim: {current_mode}", reply_markup=markup)
+        bot.send_message(message.chat.id, f"Yangi tahlil rejimini tanlang: 2024 yoki 2025\nJoriy rejim: {current_mode}", reply_markup=markup)
     @bot.message_handler(commands=['ball'])
     def ball_command(message):
         """Start process to calculate average scores from two files."""
