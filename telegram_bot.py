@@ -161,7 +161,7 @@ def migrate_database():
 def main():
     """Start the bot."""
     # Get the telegram token
-    token = "8061680273:AAFSs9LqncUy-P441QglkpCps5oM2rxyKqI"
+    token = "7706419346:AAGF9D_5kx__KaiRraGciG5FJjYdxnZnd08"
     if not token:
         logger.error("TELEGRAM_TOKEN not found in environment variables.")
         print("Please set the TELEGRAM_TOKEN environment variable.")
