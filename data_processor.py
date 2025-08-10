@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 import io
+import json
+import subprocess
+import tempfile
 import os
 import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -14,6 +17,36 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import PyPDF2
 import warnings
 warnings.filterwarnings('ignore')
+
+def _run_r_ltm_from_matrix(response_data):
+    """Run R ltm::rasch on a 0/1/NA response matrix via temp CSV and return parsed JSON."""
+    import numpy as np, os, json, subprocess, tempfile
+    if getattr(response_data, 'ndim', 2) != 2:
+        raise ValueError('response_data must be 2D')
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tf:
+        temp_csv=tf.name
+        for row in response_data:
+            row_vals=[]
+            for v in row:
+                if v is None or (isinstance(v, float) and (v!=v)):
+                    row_vals.append('')
+                else:
+                    row_vals.append(str(int(v)))
+            tf.write(','.join(row_vals)+"\n")
+    script_path=os.path.join(os.path.dirname(__file__), 'r_scripts', 'rasch_2025.R')
+    if not os.path.exists(script_path):
+        script_path=os.path.join(os.getcwd(), 'r_scripts', 'rasch_2025.R')
+    proc=subprocess.run(['Rscript', script_path, temp_csv], capture_output=True, text=True)
+    try:
+        os.unlink(temp_csv)
+    except Exception:
+        pass
+    if proc.returncode!=0:
+        raise RuntimeError(f'R ltm hisoblash xatosi: {proc.stderr.strip()}')
+    stdout=(proc.stdout or '').strip()
+    if not stdout:
+        raise RuntimeError('R skript natija chiqarmadi')
+    return json.loads(stdout)
 
 # Server quvvati optimizatsiyasi - 80% CPU ishlatish
 NUM_CORES = cpu_count() or 6
@@ -393,7 +426,7 @@ def preprocess_exam_data(df):
     
     return cleaned_df, id_column, question_columns
 
-def process_exam_data(df, progress_callback=None):
+def process_exam_data(df, progress_callback=None, mode: str = "2024"):
     """
     Tezlashtirilgan va aniq Rasch modeli qayta ishlash algoritmi.
     Katta ma'lumotlar uchun optimallashtirilgan.
@@ -423,17 +456,31 @@ def process_exam_data(df, progress_callback=None):
         progress_callback(20, "Rasch modeli ishga tushirilmoqda...")
     
     n_students, n_questions = response_data.shape
-    
-    # Parallel processing bilan adaptiv chunking
-    if n_students > 1000:
-        # Server quvvatining 80% ishlatish uchun optimal chunk size
-        optimal_chunk = max(n_students // MAX_WORKERS, 800)
-        ability_estimates, item_difficulties, rasch_model_obj = rasch_model(
-            response_data, 
-            max_students=optimal_chunk
-        )
+
+    if str(mode).strip() == "2025":
+        try:
+            r_result = _run_r_ltm_from_matrix(response_data.astype(float))
+            persons = r_result.get('persons', [])
+            import numpy as _np
+            ability_estimates = _np.array([p.get('eap', float('nan')) for p in persons], dtype=_np.float32)
+            items = r_result.get('items', [])
+            item_difficulties = _np.array([it.get('difficulty', float('nan')) for it in items], dtype=_np.float32)
+            rasch_model_obj = None
+        except Exception as e:
+            if progress_callback:
+                progress_callback(25, f"R hisoblash xatosi, fallback (2024) ishlatildi): {e}")
+            ability_estimates, item_difficulties, rasch_model_obj = rasch_model(response_data)
     else:
-        ability_estimates, item_difficulties, rasch_model_obj = rasch_model(response_data)
+        # Parallel processing bilan adaptiv chunking
+        if n_students > 1000:
+            # Server quvvatining 80% ishlatish uchun optimal chunk size
+            optimal_chunk = max(n_students // MAX_WORKERS, 800)
+            ability_estimates, item_difficulties, rasch_model_obj = rasch_model(
+                response_data, 
+                max_students=optimal_chunk
+            )
+        else:
+            ability_estimates, item_difficulties, rasch_model_obj = rasch_model(response_data)
     
     if progress_callback:
         progress_callback(50, "Baholar hisoblanmoqda...")

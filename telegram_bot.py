@@ -161,7 +161,7 @@ def migrate_database():
 def main():
     """Start the bot."""
     # Get the telegram token
-    token = "7706419346:AAGF9D_5kx__KaiRraGciG5FJjYdxnZnd08"
+    token = os.getenv('TELEGRAM_TOKEN', '').strip() or "8061680273:AAET8UflPuQj-OHAyQxgrZVoRHTZ5rVqo8I"
     if not token:
         logger.error("TELEGRAM_TOKEN not found in environment variables.")
         print("Please set the TELEGRAM_TOKEN environment variable.")
@@ -257,6 +257,20 @@ def main():
         bot.reply_to(message, help_text, parse_mode='Markdown')
     
     # Ball command handler
+    
+    # New command handler - choose 2024/2025 mode
+    @bot.message_handler(commands=['new'])
+    def new_command(message):
+        user_id = message.from_user.id
+        current_mode = user_settings.get(user_id, {}).get('mode', '2024')
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        label_2024 = '2024 ✅' if current_mode == '2024' else '2024'
+        label_2025 = '2025 ✅' if current_mode == '2025' else '2025'
+        btn_2024 = types.InlineKeyboardButton(label_2024, callback_data='mode_2024')
+        btn_2025 = types.InlineKeyboardButton(label_2025, callback_data='mode_2025')
+        markup.add(btn_2024, btn_2025)
+        bot.send_message(message.chat.id, f"Yangi tahlil rejimini tanlang: 2024 yoki 2025
+Joriy rejim: {current_mode}", reply_markup=markup)
     @bot.message_handler(commands=['ball'])
     def ball_command(message):
         """Start process to calculate average scores from two files."""
@@ -671,7 +685,7 @@ def main():
             df = pd.read_excel(file_bytes)
             
             # Process the data with improved information
-            results_df, ability_estimates, grade_counts, data_df, beta_values, rasch_model_obj = process_exam_data(df)
+            results_df, ability_estimates, grade_counts, data_df, beta_values, rasch_model_obj = process_exam_data(df, mode=user_settings.get(user_id, {}).get('mode', "2024"))
             
             # Track user activity in database
             db.add_user(
@@ -755,7 +769,7 @@ def main():
             
             success_message = (
                 f"✅ Tahlil yakunlandi!\n\n"
-                f"📊 Natijalar xulosasi:\n"
+                f"📊 Natijalar xulosasi (standart: {user_settings.get(user_id, {}).get('mode', '2024')}):\n"
                 f"👨‍🎓 Jami: {total_students} talaba\n"
                 f"🏆 A+/A: {top_grades_count} ta ({top_grade_percent:.1f}%)\n"
                 f"✅ O'tish: {passing_grades_count} ta ({pass_rate:.1f}%)\n"
@@ -808,6 +822,19 @@ def main():
         try:
             # Extract callback data
             callback_data = call.data
+            # Mode selection (2024/2025)
+            if callback_data in ('mode_2024', 'mode_2025'):
+                user_id = call.from_user.id
+                mode = '2024' if callback_data == 'mode_2024' else '2025'
+                user_settings[user_id] = user_settings.get(user_id, {})
+                user_settings[user_id]['mode'] = mode
+                bot.answer_callback_query(call.id, f'Rejim tanlandi: {mode}')
+                try:
+                    bot.edit_message_text(f'Rejim tanlandi: {mode}. Endi Excel faylni yuboring.', call.message.chat.id, call.message.message_id)
+                except Exception:
+                    pass
+                return
+
             
             # Handle different callback types
             if callback_data.startswith('download_'):
@@ -870,7 +897,7 @@ def main():
                 return
             
             # 1. Statistika matni yaratish
-            stats_text = create_comprehensive_statistics(results_df, rasch_model)
+            stats_text = create_comprehensive_statistics(results_df, rasch_model, mode=user_settings.get(user_id, {}).get('mode', "2024"))
             
             # 2. Wright map yaratish
             wright_map_buffer = None
@@ -2239,7 +2266,7 @@ def main():
     # Start the bot
     bot.infinity_polling()
 
-def create_comprehensive_statistics(results_df, rasch_model=None):
+def create_comprehensive_statistics(results_df, rasch_model=None, mode="2024"):
     """To'liq statistika matni yaratish"""
     try:
         total_students = len(results_df)
@@ -2313,7 +2340,7 @@ def create_comprehensive_statistics(results_df, rasch_model=None):
                 stats_text += f"• Outfit o'rtacha: {np.mean(rasch_model.outfit_stats):.3f}\n"
         
         stats_text += f"""
-📋 **O'zbekiston Milliy Sertifikat Standartlari (2024):**
+📋 **O'zbekiston Milliy Sertifikat Standartlari ({mode}):**
 • 70+ ball = A+ daraja (Ajoyib - Oliy Imtiyozli)
 • 65-69.9 ball = A daraja (Yaxshi - Oliy)
 • 60-64.9 ball = B+ daraja (Qoniqarli - Yuqori Imtiyozli)
