@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/rasch_bot
-Environment=TELEGRAM_TOKEN=8061680273:AAGgJhdvWUwnP1JJcgk_AksRxSJSs_VbvLk
-ExecStart=/opt/rasch_bot/venv/bin/python /opt/rasch_bot/telegram_bot.py
+WorkingDirectory=/root/rasch
+Environment=TELEGRAM_TOKEN=7706419346:AAHp03aJloB1PjvGLCOplpvVjHnOJeVKVqs
+ExecStart=/root/rasch/venv/bin/python /root/rasch/main.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
